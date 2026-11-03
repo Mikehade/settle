@@ -1,0 +1,97 @@
+[project]
+name = "settle"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "sqlalchemy[asyncio]>=2.0.35",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "dependency-injector>=4.46",
+    "typer>=0.12",
+    "httpx>=0.27",
+    "aioboto3>=13.0",
+    "langgraph>=0.2",
+    "pyjwt>=2.9",
+    "argon2-cffi>=23.1",
+    "email-validator>=2.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+    "ruff>=0.6",
+    "import-linter>=2.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["alembic/versions", "scripts/templates"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "SIM"]
+ignore = [
+    "B008",   # FastAPI's Depends()/Query() in defaults
+    "E501",   # line length is the formatter's job
+    "UP046",  # keep Generic[T] for pydantic/TypedDict generics
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Registry files: startapp appends imports at markers, so order is by insertion.
+"src/config/container.py" = ["I001"]
+"src/api/deps.py" = ["I001"]
+"src/api/router.py" = ["I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "scripts"]
+known-third-party = ["alembic"]
+
+# ---- Layer rules (run: lint-imports) --------------------------------------
+[tool.importlinter]
+root_packages = ["src"]
+
+[[tool.importlinter.contracts]]
+name = "Core and domain do not depend on api, infrastructure or config"
+type = "forbidden"
+source_modules = ["src.core", "src.domain"]
+forbidden_modules = ["src.api", "src.infrastructure", "src.config"]
+
+[[tool.importlinter.contracts]]
+name = "Domain does not depend on core"
+type = "forbidden"
+source_modules = ["src.domain"]
+forbidden_modules = ["src.core"]
+
+[[tool.importlinter.contracts]]
+name = "Infrastructure does not depend on core or api"
+type = "forbidden"
+source_modules = ["src.infrastructure"]
+forbidden_modules = ["src.core", "src.api"]
+
+[[tool.importlinter.contracts]]
+name = "API reaches infrastructure only through the container"
+type = "forbidden"
+source_modules = ["src.api"]
+forbidden_modules = ["src.infrastructure"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Shared is a leaf"
+type = "forbidden"
+source_modules = ["src.shared"]
+forbidden_modules = ["src.api", "src.core", "src.domain", "src.infrastructure", "src.config"]
