@@ -12,7 +12,13 @@ from uuid import UUID
 from src.api.ws.events import OutboundEvent
 from src.api.ws.registry import registry
 from src.core.mediation import MediationService
+from src.domain.exceptions import AppError
 from src.shared.logging import get_logger
+
+# Channel autonomous (webhook) runs broadcast to when no seller could be resolved.
+# A connected superuser/ops client subscribes to it; resolved runs go to the
+# seller's own channel instead.
+AUTO_CHANNEL = "mediation:auto"
 
 
 def default_envelope(event: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -55,13 +61,17 @@ async def run_and_broadcast(
     seller_id: UUID | None,
     channel: str,
     envelope,
+    force_escalate: bool = False,
 ) -> None:
     """Drive a full mediation, broadcasting each mapped event to `channel`.
     `envelope` builds the wire message (consumer._envelope)."""
     try:
-        async for ev in mediation_service.mediate_stream(dispute_id, seller_id=seller_id):
+        async for ev in mediation_service.mediate_stream(dispute_id, seller_id=seller_id, force_escalate=force_escalate):
             wire, data = map_event(ev)
             await registry.broadcast(channel, envelope(str(wire), data))
+    except AppError as e:
+        logger.info("Mediation stream rejected", extra={"event": "mediation.stream_rejected", "dispute": dispute_id, "code": e.code})
+        await registry.broadcast(channel, envelope(str(OutboundEvent.CASE_ERROR), {"dispute_id": dispute_id, "error": e.message, "code": e.code}))
     except Exception as e:  # noqa: BLE001
         logger.error("Mediation stream crashed", extra={"event": "mediation.stream_crash", "dispute": dispute_id, "error": str(e)}, exc_info=True)
-        await registry.broadcast(channel, envelope(str(OutboundEvent.CASE_ERROR), {"error": str(e)}))
+        await registry.broadcast(channel, envelope(str(OutboundEvent.CASE_ERROR), {"dispute_id": dispute_id, "error": str(e)}))

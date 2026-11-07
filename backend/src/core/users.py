@@ -44,6 +44,12 @@ class UserService:
         logger.info("User created", extra={"event": "user.created", "user_id": str(user["id"]), "is_superuser": is_superuser})
         return user
 
+    async def get_by_merchant_id(self, merchant_id: str) -> User | None:
+        """Resolve the seller that owns a PayPal merchant/payee id (webhook path)."""
+        if not merchant_id:
+            return None
+        return await self._users.get_by_merchant_id(merchant_id)
+
     async def change_password(self, *, email: str, new_password: str) -> None:
         self._check_password(new_password)
         async with self._uow():

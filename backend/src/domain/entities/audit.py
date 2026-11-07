@@ -12,6 +12,7 @@ from typing import Any, TypedDict
 class AuditEntry(TypedDict, total=False):
     id: uuid.UUID
     dispute_id: uuid.UUID
+    seller_id: uuid.UUID | None     # owning seller (scopes the audit trail)
     paypal_dispute_id: str
     case_file: dict[str, Any]       # the inputs the model saw
     decision: dict[str, Any]        # the full Decision (classification, evidence, policy, outcome, rationale)

@@ -14,12 +14,14 @@ from typing import Any
 
 from fastapi import WebSocket
 
-from src.api.mediation.stream import run_and_broadcast
+from src.api.mediation.stream import AUTO_CHANNEL, run_and_broadcast
 from src.api.ws.consumer import BaseWebSocketConsumer
 from src.api.ws.events import InboundEvent, OutboundEvent
+from src.api.ws.registry import registry
 from src.core.auth import AuthService
 from src.core.mediation import MediationService
 from src.core.policy import FairnessPolicyService
+from src.domain.exceptions import AppError
 from src.shared.logging import get_logger
 
 logger = get_logger(__name__)
@@ -43,9 +45,14 @@ class MediationConsumer(BaseWebSocketConsumer):
 
     async def on_connect(self) -> None:
         logger.info("Mediation WS connected", extra={"event": "mediation.ws_connect", "user": str(self.user["id"]) if self.user else None})
+        # Superusers/ops also follow the autonomous (webhook) feed, so unattributed
+        # runs aren't invisible. Regular sellers see their own channel only.
+        if self.user and self.user.get("is_superuser"):
+            await registry.register(AUTO_CHANNEL, self)
 
     async def on_disconnect(self) -> None:
-        pass
+        if self.user and self.user.get("is_superuser"):
+            await registry.unregister(AUTO_CHANNEL, self)
 
     async def handle_message(self, message: dict[str, Any]) -> None:
         event = message.get("event")
@@ -68,12 +75,32 @@ class MediationConsumer(BaseWebSocketConsumer):
             return
 
         if event == InboundEvent.APPROVE.value:
-            summary = await self._mediation.approve(data.get("dispute_id"), seller_id=seller_id)
+            dispute_id = data.get("dispute_id")
+            try:
+                summary = await self._mediation.approve(dispute_id, seller_id=seller_id)
+            except AppError as e:
+                await self.send_event(OutboundEvent.CASE_ERROR, {"dispute_id": dispute_id, "error": e.message, "code": e.code})
+                return
+            except Exception as e:  # noqa: BLE001 — never let an action close the socket
+                logger.error("Approve failed", extra={"event": "mediation.approve_error", "dispute": dispute_id, "error": str(e)}, exc_info=True)
+                await self.send_event(OutboundEvent.CASE_ERROR, {"dispute_id": dispute_id, "error": "Approve failed."})
+                return
+            # Matches the documented case.executed shape: { dispute_id, result, decision }.
             await self.broadcast_event(OutboundEvent.CASE_EXECUTED, summary)
             return
 
         if event == InboundEvent.REJECT.value:
-            summary = await self._mediation.reject(data.get("dispute_id"), seller_id=seller_id)
+            dispute_id = data.get("dispute_id")
+            try:
+                summary = await self._mediation.reject(dispute_id, seller_id=seller_id)
+            except AppError as e:
+                await self.send_event(OutboundEvent.CASE_ERROR, {"dispute_id": dispute_id, "error": e.message, "code": e.code})
+                return
+            except Exception as e:  # noqa: BLE001
+                logger.error("Reject failed", extra={"event": "mediation.reject_error", "dispute": dispute_id, "error": str(e)}, exc_info=True)
+                await self.send_event(OutboundEvent.CASE_ERROR, {"dispute_id": dispute_id, "error": "Reject failed."})
+                return
+            # Matches the documented case.explained shape: { dispute_id, rationale, action_taken, decision }.
             await self.broadcast_event(OutboundEvent.CASE_EXPLAINED, summary)
             return
 
