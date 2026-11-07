@@ -39,6 +39,25 @@ class PayPalClient:
         tid = f"{transaction_id}-{tracking_number}" if tracking_number else transaction_id
         return await self._http.request("GET", f"/v1/shipping/trackers/{tid}")
 
+    async def verify_webhook_signature(self, *, webhook_id: str, headers: dict[str, str], event_body: dict[str, Any]) -> bool:
+        """Verify an inbound webhook against PayPal (Notifications v1).
+
+        Returns True only when PayPal reports verification_status == SUCCESS."""
+        def h(name: str) -> str:
+            return headers.get(name) or headers.get(name.lower()) or ""
+
+        body = {
+            "transmission_id": h("paypal-transmission-id"),
+            "transmission_time": h("paypal-transmission-time"),
+            "cert_url": h("paypal-cert-url"),
+            "auth_algo": h("paypal-auth-algo"),
+            "transmission_sig": h("paypal-transmission-sig"),
+            "webhook_id": webhook_id,
+            "webhook_event": event_body,
+        }
+        resp = await self._http.request("POST", "/v1/notifications/verify-webhook-signature", json=body)
+        return resp.get("verification_status") == "SUCCESS"
+
     # ---- Writes (executor only) -------------------------------------------
     async def refund_capture(self, capture_id: str, amount: float, currency: str) -> dict[str, Any]:
         """Refund a captured payment, full or partial (Payments v2)."""

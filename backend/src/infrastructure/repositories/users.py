@@ -18,6 +18,11 @@ class SqlUserRepository(BaseRepository):
             row = await s.scalar(select(UserModel).where(UserModel.email == email))
             return self._to_dict(row) if row else None
 
+    async def get_by_merchant_id(self, merchant_id: str) -> User | None:
+        async with self.session() as s:
+            row = await s.scalar(select(UserModel).where(UserModel.paypal_merchant_id == merchant_id))
+            return self._to_dict(row) if row else None
+
     async def get_with_password(self, email: str) -> UserWithPassword | None:
         async with self.session() as s:
             row = await s.scalar(select(UserModel).where(UserModel.email == email))

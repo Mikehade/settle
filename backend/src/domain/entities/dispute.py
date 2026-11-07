@@ -8,7 +8,7 @@ class Dispute(TypedDict, total=False):
     id: uuid.UUID
     seller_id: uuid.UUID | None     # owning AuthProfile (the seller)
     paypal_dispute_id: str          # PayPal dispute id / seeded fixture id
-    status: str                     # open | mediating | resolved | escalated | failed
+    status: str                     # open | mediating | resolved | escalated | rejected | failed (see constants.statuses)
     dispute_type: str               # DisputeType value
     reason_code: str | None
     disputed_amount: float
@@ -26,6 +26,7 @@ class Dispute(TypedDict, total=False):
 
 
 class DisputeUpdate(TypedDict, total=False):
+    seller_id: uuid.UUID | None
     status: str
     outcome: str | None
     refund_amount: float | None

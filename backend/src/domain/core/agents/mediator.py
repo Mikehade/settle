@@ -39,6 +39,85 @@ def _case_file_json(case_file: CaseFile) -> str:
     return json.dumps(case_file, indent=2, default=str)
 
 
+class _StageSplitter:
+    """Parses the model's live narration into stages as it streams.
+
+    The native engine narrates the fixed chain with explicit markers
+    (`<<<CLASSIFY>>>` …). This turns that single token stream into live
+    `reasoning_step` + `token` events: tokens carry the active `stage`, and a
+    `reasoning_step` is emitted the moment a stage completes (when the next
+    marker arrives, and the last at flush). Split markers across token
+    boundaries are handled by holding back a short tail; markers themselves are
+    stripped from the emitted text. If the model never emits markers, nothing is
+    produced here and the caller falls back to reconstructing steps from the
+    finished decision — so behaviour never regresses.
+    """
+
+    MARKERS: tuple[tuple[str, str], ...] = (
+        ("<<<CLASSIFY>>>", "classify"),
+        ("<<<WEIGH>>>", "weigh"),
+        ("<<<POLICY>>>", "policy"),
+        ("<<<CHOOSE>>>", "choose"),
+    )
+    _MAX_MARKER = max(len(m) for m, _ in MARKERS)
+
+    def __init__(self) -> None:
+        self._buf = ""
+        self._stage: str | None = None
+        self._texts: dict[str, str] = {}
+        self.seen: list[str] = []
+
+    def _emit_text(self, text: str) -> list[dict]:
+        if not text:
+            return []
+        if self._stage is not None:
+            self._texts[self._stage] = self._texts.get(self._stage, "") + text
+        return [{"type": "token", "text": text, "stage": self._stage}]
+
+    def _partial_tail_len(self) -> int:
+        """Longest suffix of the buffer that could be the start of a marker."""
+        for size in range(min(self._MAX_MARKER - 1, len(self._buf)), 0, -1):
+            tail = self._buf[-size:]
+            if any(m.startswith(tail) for m, _ in self.MARKERS):
+                return size
+        return 0
+
+    def feed(self, text: str) -> list[dict]:
+        events: list[dict] = []
+        self._buf += text
+        while True:
+            hit_pos: int | None = None
+            hit_marker = hit_stage = ""
+            for marker, stage in self.MARKERS:
+                idx = self._buf.find(marker)
+                if idx != -1 and (hit_pos is None or idx < hit_pos):
+                    hit_pos, hit_marker, hit_stage = idx, marker, stage
+            if hit_pos is None:
+                break
+            events += self._emit_text(self._buf[:hit_pos])
+            if self._stage is not None:  # close the stage that just ended
+                events.append({"type": "reasoning_step", "stage": self._stage, "text": self._texts.get(self._stage, "").strip()})
+            self._stage = hit_stage
+            if hit_stage not in self.seen:
+                self.seen.append(hit_stage)
+            self._texts.setdefault(hit_stage, "")
+            self._buf = self._buf[hit_pos + len(hit_marker):]
+        hold = self._partial_tail_len()
+        if hold:
+            emit_now, self._buf = self._buf[:-hold], self._buf[-hold:]
+        else:
+            emit_now, self._buf = self._buf, ""
+        events += self._emit_text(emit_now)
+        return events
+
+    def flush(self) -> list[dict]:
+        events = self._emit_text(self._buf)
+        self._buf = ""
+        if self._stage is not None:
+            events.append({"type": "reasoning_step", "stage": self._stage, "text": self._texts.get(self._stage, "").strip()})
+        return events
+
+
 def _fallback_decision(case_file: CaseFile, reason: str) -> Decision:
     return Decision(
         dispute_id=case_file.get("dispute_id", ""),
@@ -130,6 +209,7 @@ class MediatorAgent(BaseAgent, BaseGraphAgent):
     async def _mediate_stream_native(self, case_file: CaseFile, policy_text: str) -> AsyncGenerator[dict, None]:
         self._begin(case_file)
         system = self._system(case_file, policy_text)
+        splitter = _StageSplitter()
         try:
             async for event in self.stream_turn(
                 text="Mediate this dispute now. Reason through the chain out loud, then call exactly one proposal tool.",
@@ -137,27 +217,36 @@ class MediatorAgent(BaseAgent, BaseGraphAgent):
             ):
                 t = event.get("type")
                 if t == "token":
-                    yield {"type": "token", "text": event["text"]}
+                    # Split the narration into live, stage-tagged tokens + per-stage steps.
+                    for ev in splitter.feed(event["text"]):
+                        yield ev
                 elif t == "tool_call":
                     yield {"type": "tool_call", "name": event.get("name"), "input": event.get("input", {})}
                 elif t == "tool_result":
                     yield {"type": "tool_result", "name": event.get("name"), "ok": event.get("ok", True)}
         except Exception as e:  # noqa: BLE001
             logger.error("Native mediation stream failed", extra={"event": "mediator.stream_error", "error": str(e)}, exc_info=True)
+            # An error ends the run — no decision follows.
             yield {"type": "error", "error": str(e)}
+            return
+
+        for ev in splitter.flush():
+            yield ev
 
         decision = self.proposal_tools.proposal or _fallback_decision(case_file, "No proposal tool was called.")
         decision["dispute_id"] = case_file.get("dispute_id", "")
         if not decision.get("dispute_type"):
             decision["dispute_type"] = case_file.get("dispute_type", DisputeType.UNAUTHORIZED_OR_OTHER.value)
-        # Replay the chain as discrete steps for the UI, sourced from the decision.
+        # Fallback: emit any stage the model didn't mark live, from the decision, so
+        # the UI always gets all four steps even if the model ignored the markers.
+        seen = set(splitter.seen)
         for stage, text in (
             ("classify", decision.get("classification") or decision.get("dispute_type", "")),
             ("weigh", decision.get("evidence_summary", "")),
             ("policy", decision.get("policy_application", "")),
             ("choose", f"{decision.get('outcome') or 'escalate'} (confidence {decision.get('confidence', 0):.2f})"),
         ):
-            if text:
+            if stage not in seen and text:
                 yield {"type": "reasoning_step", "stage": stage, "text": text}
         yield {"type": "decision", "decision": dict(decision)}
 

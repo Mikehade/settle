@@ -34,7 +34,19 @@ class DisputeSource:
         try:
             raw = await self._client.list_disputes()
             items = raw.get("items", [])
-            real = [{"dispute_id": d.get("dispute_id"), "status": d.get("status"), "reason": d.get("reason")} for d in items]
+            real = [
+                {
+                    "dispute_id": d.get("dispute_id"),
+                    "status": (d.get("status") or "open").lower(),
+                    "reason": d.get("reason"),
+                    "source": "paypal",
+                    "amount": float((d.get("dispute_amount", {}) or {}).get("value", 0) or 0),
+                    "currency": (d.get("dispute_amount", {}) or {}).get("currency_code", "USD"),
+                    "item": None,
+                    "dispute_type": None,
+                }
+                for d in items
+            ]
             if self._mode == "paypal":
                 return real
             return real + [self._summary(cf) for cf in DEMO_FIXTURES.values()]
@@ -61,7 +73,16 @@ class DisputeSource:
     # ---- Internals ---------------------------------------------------------
     @staticmethod
     def _summary(cf: dict[str, Any]) -> dict[str, Any]:
-        return {"dispute_id": cf["dispute_id"], "status": "open", "reason": cf.get("reason_code"), "source": "fixture"}
+        return {
+            "dispute_id": cf["dispute_id"],
+            "status": "open",  # the source's view; MediationService overlays the DB status
+            "reason": cf.get("reason_code"),
+            "source": "fixture",
+            "amount": cf.get("disputed_amount"),
+            "currency": cf.get("currency", "USD"),
+            "item": cf.get("item_name"),
+            "dispute_type": cf.get("dispute_type"),
+        }
 
     async def _assemble_from_paypal(self, dispute_id: str) -> CaseFile:
         dispute = await self._client.get_dispute(dispute_id)

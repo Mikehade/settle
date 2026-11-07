@@ -19,6 +19,7 @@ class DisputeResponse(BaseModel):
     refund_amount: float | None = None
     confidence: float | None = None
     source: str
+    case_file: dict = {}          # tracking, item, transaction, prior refunds — no audit lookup needed
     created_at: datetime
     updated_at: datetime
     resolved_at: datetime | None = None
@@ -29,6 +30,18 @@ class OpenDisputeSummary(BaseModel):
     status: str
     reason: str | None = None
     source: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+    item: str | None = None
+    dispute_type: str | None = None
+    updated_at: datetime | None = None
+    resolved_at: datetime | None = None
+
+
+class DisputePreviewResponse(BaseModel):
+    dispute_id: str
+    status: str
+    case_file: dict
 
 
 class MediationSummaryResponse(BaseModel):
@@ -40,3 +53,12 @@ class MediationSummaryResponse(BaseModel):
     recommendation: str | None = None
     decision: dict | None = None
     error: str | None = None
+
+
+class ActionResultResponse(BaseModel):
+    """Result of a money-moving seller action (approve/reject) over REST."""
+    dispute_id: str
+    executed: bool = False
+    action_taken: str = ""
+    rationale: str | None = None
+    decision: dict | None = None
