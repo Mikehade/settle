@@ -30,8 +30,10 @@ export const NOT_STARTED_MESSAGE = "Settle didn't start mediating this case. Try
 const MEDIATION_PATH = "/api/v1/ws/mediation";
 
 /** The socket address for a token. Browsers can't set headers on a WebSocket, so it rides along. */
-export function mediationUrl(token: string) {
-  const url = new URL(MEDIATION_PATH, env.apiUrl);
+export function mediationUrl(token: string, apiUrl: string = env.apiUrl) {
+  // Joined as text, not resolved with `new URL(path, base)`: an absolute path would replace any
+  // path on the base, and the API may be mounted under one (https://host/settle).
+  const url = new URL(`${apiUrl}${MEDIATION_PATH}`);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.searchParams.set("token", token);
   return url.toString();
