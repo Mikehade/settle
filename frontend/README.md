@@ -205,10 +205,13 @@ which stays readable in light mode.
 
 ## Environment
 
-| Variable       | Used by          | Default                 | Purpose                                          |
-| -------------- | ---------------- | ----------------------- | ------------------------------------------------ |
-| `BACKEND_URL`  | `vite.config.ts` | `http://localhost:8000` | Where the dev proxy sends `/api`                 |
-| `VITE_API_URL` | the app          | same origin             | API origin for a build served apart from the API |
+| Variable       | Used by          | Default                 | Purpose                                            |
+| -------------- | ---------------- | ----------------------- | -------------------------------------------------- |
+| `BACKEND_URL`  | `vite.config.ts` | `http://localhost:8000` | Where the dev proxy sends `/api`                   |
+| `VITE_API_URL` | the app          | same origin             | API base URL for a build served apart from the API |
+
+`VITE_API_URL` may include the path the API is mounted under, e.g. `https://api.example.com/settle`;
+REST calls and the mediation WebSocket both go to `<VITE_API_URL>/api/v1/...`.
 
 When the app and the API are on different origins, the backend's `CORS_ORIGINS` must include the
 app's origin.
