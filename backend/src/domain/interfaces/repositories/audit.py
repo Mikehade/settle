@@ -8,6 +8,14 @@ from src.domain.entities.common import Page
 class AuditRepositoryInterface(Protocol):
     async def create(self, *, fields: dict) -> AuditEntry: ...
 
-    async def get_page(self, *, page: int, page_size: int) -> Page[AuditEntry]: ...
+    async def get_page(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        seller_id: uuid.UUID | None = None,
+        outcome: str | None = None,
+        gate: str | None = None,
+    ) -> Page[AuditEntry]: ...
 
-    async def list_for_dispute(self, dispute_id: uuid.UUID) -> list[AuditEntry]: ...
+    async def list_for_dispute(self, dispute_id: uuid.UUID, *, seller_id: uuid.UUID | None = None) -> list[AuditEntry]: ...

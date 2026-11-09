@@ -14,9 +14,10 @@ class AuditService:
         self._audit = audit
         self._uow = uow
 
-    async def record(self, *, dispute_id: uuid.UUID, paypal_dispute_id: str, case_file: dict, decision: dict, result: dict, engine: str, served_by: str | None) -> AuditEntry:
+    async def record(self, *, dispute_id: uuid.UUID, paypal_dispute_id: str, case_file: dict, decision: dict, result: dict, engine: str, served_by: str | None, seller_id: uuid.UUID | None = None) -> AuditEntry:
         fields = {
             "dispute_id": dispute_id,
+            "seller_id": seller_id,
             "paypal_dispute_id": paypal_dispute_id,
             "case_file": case_file,
             "decision": decision,
@@ -34,8 +35,8 @@ class AuditService:
         logger.info("Audit entry recorded", extra={"event": "audit.recorded", "dispute_id": str(dispute_id), "gate": fields["gate"], "executed": fields["executed"]})
         return entry
 
-    async def get_page(self, *, page: int, page_size: int) -> Page[AuditEntry]:
-        return await self._audit.get_page(page=page, page_size=page_size)
+    async def get_page(self, *, page: int, page_size: int, seller_id: uuid.UUID | None = None, outcome: str | None = None, gate: str | None = None) -> Page[AuditEntry]:
+        return await self._audit.get_page(page=page, page_size=page_size, seller_id=seller_id, outcome=outcome, gate=gate)
 
-    async def list_for_dispute(self, dispute_id: uuid.UUID) -> list[AuditEntry]:
-        return await self._audit.list_for_dispute(dispute_id)
+    async def list_for_dispute(self, dispute_id: uuid.UUID, *, seller_id: uuid.UUID | None = None) -> list[AuditEntry]:
+        return await self._audit.list_for_dispute(dispute_id, seller_id=seller_id)

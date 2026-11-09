@@ -16,11 +16,20 @@ class FakeAuth:
 
 
 class FakeMediation:
-    async def list_open(self):
-        return [{"dispute_id": "FIXTURE-NR-001", "status": "open", "reason": "NOT_RECEIVED", "source": "fixture"}]
+    async def list_open(self, *, seller_id=None):
+        return [{"dispute_id": "FIXTURE-NR-001", "status": "open", "reason": "NOT_RECEIVED", "source": "fixture", "amount": 59.99, "currency": "USD", "item": "Wireless earbuds", "dispute_type": "not_received"}]
 
     async def mediate(self, dispute_id, *, seller_id=None):
         return {"dispute_id": dispute_id, "gate": "execute", "executed": True, "action_taken": "Issued refund of 59.99 USD", "rationale": "tracking shows never shipped", "decision": {"outcome": "refund"}}
+
+    async def preview(self, paypal_dispute_id, *, seller_id=None):
+        return {"dispute_id": paypal_dispute_id, "status": "open", "case_file": {"item_name": "Wireless earbuds"}}
+
+    async def approve(self, paypal_dispute_id, *, seller_id=None):
+        return {"dispute_id": paypal_dispute_id, "result": {"executed": True, "action_taken": "Issued refund of 59.99 USD"}, "decision": {"outcome": "refund"}}
+
+    async def reject(self, paypal_dispute_id, *, seller_id=None):
+        return {"dispute_id": paypal_dispute_id, "rationale": "declined", "action_taken": "Recommendation rejected — left for manual handling.", "decision": {"outcome": "refund"}}
 
 
 @pytest.fixture
