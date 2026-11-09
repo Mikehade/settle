@@ -1,0 +1,7 @@
+dist
+coverage
+test-results
+playwright-report
+pnpm-lock.yaml
+src/routeTree.gen.ts
+src/lib/api/schema.d.ts

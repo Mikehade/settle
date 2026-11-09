@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Settle: AI mediation for PayPal disputes." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Settle</title>
+    <script>
+      // Apply the saved or system theme before first paint so there is no flash.
+      (function () {
+        try {
+          var saved = localStorage.getItem("settle-theme");
+          var dark =
+            saved === "dark" ||
+            (saved !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
