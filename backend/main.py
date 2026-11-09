@@ -1,5 +1,6 @@
 """Composition root: settings, logging, container, middleware, routers, error handlers.
 No business logic and no routes live here."""
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -12,6 +13,9 @@ from src.api.router import api_router
 from src.config import get_settings
 from src.config.container import Container
 from src.shared.logging import configure_logging, get_logger
+
+from dotenv import load_dotenv
+load_dotenv()
 
 settings = get_settings()
 configure_logging(level=settings.LOG_LEVEL, fmt=settings.LOG_FORMAT, service=settings.APP_NAME, env=settings.APP_ENV)
