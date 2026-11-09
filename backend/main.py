@@ -17,6 +17,12 @@ settings = get_settings()
 configure_logging(level=settings.LOG_LEVEL, fmt=settings.LOG_FORMAT, service=settings.APP_NAME, env=settings.APP_ENV)
 logger = get_logger(__name__)
 
+# API root used when FastAPI is behind a reverse proxy such as Nginx.
+API_ROOT = os.getenv("API_ROOT_PATH", "").strip().rstrip("/")
+logger.info(f"API Root: {API_ROOT}")
+if API_ROOT and not API_ROOT.startswith("/"):
+    API_ROOT = f"/{API_ROOT}"
+
 
 def create_app() -> FastAPI:
     container = Container()
@@ -35,6 +41,7 @@ def create_app() -> FastAPI:
         version=settings.VERSION,
         lifespan=lifespan,
         docs_url="/docs" if settings.DOCS_ENABLED else None,
+        root_path=API_ROOT,
         redoc_url=None,
         openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
     )
